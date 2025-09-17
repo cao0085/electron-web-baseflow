@@ -1,0 +1,58 @@
+{
+  "name": "electron-editor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "prepare-client": "cd ../Client && npm run build",
+    "build": "npm run prepare-client && electron-builder",
+    "build:win": "npm run prepare-client && electron-builder --win",
+    "dist": "npm run prepare-client && electron-builder --publish=never"
+  },
+  "build": {
+    "appId": "com.yourcompany.electron-editor",
+    "productName": "網站內容編輯器",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "editor.html",
+      "package.json",
+      "node_modules/**/*",
+      "../Client/build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../Client/build",
+        "to": "Client/build"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^26.0.12"
+  }
+}

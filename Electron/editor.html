@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>內容編輯器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 450px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #e2f3ff;
+            color: #004085;
+            border: 1px solid #b8daff;
+            margin-bottom: 20px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>網站內容編輯器</h2>
+        
+        <div class="info">
+            <strong>使用說明:</strong><br>
+            修改下方內容後點擊儲存，右側預覽視窗會立即更新顯示實際網站效果
+        </div>
+        
+        <div class="form-group">
+            <label for="title">網站標題</label>
+            <input type="text" id="title" placeholder="輸入您的網站標題">
+        </div>
+        
+        <div class="form-group">
+            <label for="description">網站描述</label>
+            <textarea id="description" placeholder="輸入您的網站描述內容"></textarea>
+        </div>
+        
+        <button id="saveBtn" onclick="saveContent()">儲存並預覽</button>
+        
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron')
+
+        let isLoading = false
+
+        // 載入現有內容
+        async function loadContent() {
+            try {
+                const content = await ipcRenderer.invoke('load-content')
+                document.getElementById('title').value = content.title || ''
+                document.getElementById('description').value = content.description || ''
+            } catch (error) {
+                showMessage('載入內容失敗: ' + error.message, 'error')
+            }
+        }
+
+        // 儲存內容
+        async function saveContent() {
+            if (isLoading) return
+            
+            isLoading = true
+            const saveBtn = document.getElementById('saveBtn')
+            const originalText = saveBtn.textContent
+            saveBtn.textContent = '儲存中...'
+            saveBtn.disabled = true
+
+            try {
+                const content = {
+                    title: document.getElementById('title').value.trim(),
+                    description: document.getElementById('description').value.trim()
+                }
+
+                if (!content.title) {
+                    showMessage('請輸入網站標題', 'error')
+                    return
+                }
+
+                const result = await ipcRenderer.invoke('save-content', content)
+                
+                if (result.success) {
+                    showMessage('儲存成功！預覽視窗已更新', 'success')
+                } else {
+                    showMessage('儲存失敗: ' + result.error, 'error')
+                }
+            } catch (error) {
+                showMessage('儲存失敗: ' + error.message, 'error')
+            } finally {
+                isLoading = false
+                saveBtn.textContent = originalText
+                saveBtn.disabled = false
+            }
+        }
+
+        // 顯示訊息
+        function showMessage(text, type = 'success') {
+            const messageDiv = document.getElementById('message')
+            messageDiv.textContent = text
+            messageDiv.className = `message ${type}`
+            messageDiv.style.display = 'block'
+            
+            setTimeout(() => {
+                messageDiv.style.display = 'none'
+            }, 3000)
+        }
+
+        // 監聽 Enter 鍵快速儲存
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault()
+                saveContent()
+            }
+        })
+
+        // 頁面載入時讀取內容
+        window.addEventListener('DOMContentLoaded', loadContent)
+    </script>
+</body>
+</html>

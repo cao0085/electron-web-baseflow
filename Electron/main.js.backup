@@ -1,0 +1,183 @@
+const { app, BrowserWindow, ipcMain } = require('electron')
+const path = require('path')
+const fs = require('fs')
+const express = require('express')
+
+let mainWindow
+let previewWindow
+let server
+
+// 內建靜態檔案伺服器
+const startInternalServer = () => {
+  return new Promise((resolve, reject) => {
+    const app = express()
+    const buildPath = path.join(__dirname, '../Client/build')
+    
+    // 檢查 build 資料夾是否存在
+    if (!fs.existsSync(buildPath)) {
+      reject(new Error('Client build 資料夾不存在，請先執行 npm run prepare-client'))
+      return
+    }
+    
+    // 提供靜態檔案
+    app.use(express.static(buildPath))
+    
+    // 處理 React Router (SPA)
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(buildPath, 'index.html'))
+    })
+    
+    // 啟動伺服器
+    server = app.listen(3001, (err) => {
+      if (err) {
+        reject(err)
+      } else {
+        console.log('內建伺服器啟動在 http://localhost:3001')
+        resolve()
+      }
+    })
+  })
+}
+
+const createMainWindow = () => {
+  mainWindow = new BrowserWindow({
+    width: 500,
+    height: 600,
+    x: 100,
+    y: 100,
+    title: '內容編輯器',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  })
+
+  mainWindow.loadFile('editor.html')
+}
+
+const createPreviewWindow = () => {
+  previewWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    x: 650,
+    y: 100,
+    title: '網站預覽',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  // 載入內建伺服器
+  previewWindow.loadURL('http://localhost:3001')
+}
+
+// 儲存內容並更新預覽
+ipcMain.handle('save-content', async (event, content) => {
+  try {
+    // 儲存到 Client 的 public/data 資料夾（開發用）
+    const publicDataPath = path.join(__dirname, '../Client/public/data/content.json')
+    const publicDir = path.dirname(publicDataPath)
+    
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true })
+    }
+    
+    fs.writeFileSync(publicDataPath, JSON.stringify(content, null, 2))
+    
+    // 也儲存到 build 資料夾（預覽用）
+    const buildDataPath = path.join(__dirname, '../Client/build/data/content.json')
+    const buildDir = path.dirname(buildDataPath)
+    
+    if (!fs.existsSync(buildDir)) {
+      fs.mkdirSync(buildDir, { recursive: true })
+    }
+    
+    fs.writeFileSync(buildDataPath, JSON.stringify(content, null, 2))
+    
+    // 重新載入預覽視窗
+    if (previewWindow) {
+      previewWindow.reload()
+    }
+    
+    return { success: true }
+  } catch (error) {
+    console.error('儲存失敗:', error)
+    return { success: false, error: error.message }
+  }
+})
+
+// 載入現有內容
+ipcMain.handle('load-content', async () => {
+  try {
+    const filePath = path.join(__dirname, '../Client/public/data/content.json')
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8')
+      return JSON.parse(content)
+    }
+    
+    // 預設內容
+    const defaultContent = { 
+      title: '我的網站標題', 
+      description: '這是我的網站描述，可以透過編輯器修改' 
+    }
+    
+    return defaultContent
+  } catch (error) {
+    console.error('載入內容失敗:', error)
+    return { title: '預設標題', description: '預設描述' }
+  }
+})
+
+// 應用程式啟動
+app.whenReady().then(async () => {
+  try {
+    console.log('正在啟動內建伺服器...')
+    await startInternalServer()
+    
+    console.log('建立視窗...')
+    createMainWindow()
+    
+    // 等一下再開預覽視窗，確保伺服器完全啟動
+    setTimeout(() => {
+      createPreviewWindow()
+    }, 1000)
+    
+  } catch (error) {
+    console.error('啟動失敗:', error)
+    
+    // 如果伺服器啟動失敗，顯示錯誤訊息
+    const errorWindow = new BrowserWindow({
+      width: 400,
+      height: 200,
+      resizable: false
+    })
+    
+    errorWindow.loadURL(`data:text/html,
+      <h2>啟動失敗</h2>
+      <p>請確保已經執行過:</p>
+      <code>npm run prepare-client</code>
+      <p>錯誤: ${error.message}</p>
+    `)
+  }
+})
+
+// 關閉時清理
+app.on('before-quit', () => {
+  if (server) {
+    console.log('關閉內建伺服器...')
+    server.close()
+  }
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createMainWindow()
+  }
+})
